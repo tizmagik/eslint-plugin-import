@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { test, SYNTAX_CASES } from '../utils';
+import { test, SYNTAX_CASES, testVersion } from '../utils';
 
 import { CASE_SENSITIVE_FS } from 'eslint-module-utils/resolve';
 
@@ -22,7 +22,7 @@ function runResolverTests(resolver) {
   }
 
   ruleTester.run(`no-unresolved (${resolver})`, rule, {
-    valid: [
+    valid: [].concat(
       test({ code: 'import "./malformed.js"' }),
 
       rest({ code: 'import foo from "./bar";' }),
@@ -31,6 +31,12 @@ function runResolverTests(resolver) {
       rest({ code: "import fs from 'fs';" }),
       rest({ code: "import('fs');",
         parser: require.resolve('babel-eslint') }),
+
+      // check with eslint parser
+      testVersion('>= 7', () => rest({
+        code: "import('fs');",
+        parserOptions: { ecmaVersion: 2021 },
+      })) || [],
 
       rest({ code: 'import * as foo from "a"' }),
 
@@ -83,16 +89,15 @@ function runResolverTests(resolver) {
         options: [{ commonjs: true }] }),
       rest({ code: 'require(foo)',
         options: [{ commonjs: true }] }),
-    ],
+    ),
 
-    invalid: [
+    invalid: [].concat(
       rest({
         code: 'import reallyfake from "./reallyfake/module"',
         settings: { 'import/ignore': ['^\\./fake/'] },
         errors: [{ message: 'Unable to resolve path to module ' +
                             '\'./reallyfake/module\'.' }],
       }),
-
 
       rest({
         code: "import bar from './baz';",
@@ -118,9 +123,9 @@ function runResolverTests(resolver) {
         }] }),
       rest({
         code: "import('in-alternate-root').then(function({DEEP}){});",
-        errors: [{ message: 'Unable to resolve path to ' +
-                          "module 'in-alternate-root'.",
-        type: 'Literal',
+        errors: [{
+          message: 'Unable to resolve path to module \'in-alternate-root\'.',
+          type: 'Literal',
         }],
         parser: require.resolve('babel-eslint') }),
 
@@ -130,6 +135,16 @@ function runResolverTests(resolver) {
         code: 'export * from "./does-not-exist"',
         errors: ["Unable to resolve path to module './does-not-exist'."],
       }),
+
+      // check with eslint parser
+      testVersion('>= 7', () => rest({
+        code: "import('in-alternate-root').then(function({DEEP}){});",
+        errors: [{
+          message: 'Unable to resolve path to module \'in-alternate-root\'.',
+          type: 'Literal',
+        }],
+        parserOptions: { ecmaVersion: 2021 },
+      })) || [],
 
       // export symmetry proposal
       rest({ code: 'export * as bar from "./does-not-exist"',
@@ -187,7 +202,7 @@ function runResolverTests(resolver) {
           type: 'Literal',
         }],
       }),
-    ],
+    ),
   });
 
   ruleTester.run(`issue #333 (${resolver})`, rule, {
@@ -381,4 +396,21 @@ ruleTester.run('no-unresolved electron', rule, {
 ruleTester.run('no-unresolved syntax verification', rule, {
   valid: SYNTAX_CASES,
   invalid:[],
+});
+
+// https://github.com/benmosher/eslint-plugin-import/issues/2024
+ruleTester.run('import() with built-in parser', rule, {
+  valid: [].concat(
+    testVersion('>=7', () => ({
+      code: "import('fs');",
+      parserOptions: { ecmaVersion: 2021 },
+    })) || [],
+  ),
+  invalid: [].concat(
+    testVersion('>=7', () => ({
+      code: 'import("./does-not-exist-l0w9ssmcqy9").then(() => {})',
+      parserOptions: { ecmaVersion: 2021 },
+      errors: ["Unable to resolve path to module './does-not-exist-l0w9ssmcqy9'."],
+    })) || [],
+  ),
 });

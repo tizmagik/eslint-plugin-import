@@ -1,10 +1,14 @@
-import containsPath from 'contains-path';
 import path from 'path';
 
 import resolve from 'eslint-module-utils/resolve';
 import moduleVisitor from 'eslint-module-utils/moduleVisitor';
 import docsUrl from '../docsUrl';
 import importType from '../core/importType';
+
+const containsPath = (filepath, target) => {
+  const relative = path.relative(target, filepath);
+  return relative === '' || !relative.startsWith('..');
+};
 
 module.exports = {
   meta: {
@@ -68,6 +72,19 @@ module.exports = {
       });
     }
 
+    const zoneExceptions = matchingZones.map((zone) => {
+      const exceptionPaths = zone.except || [];
+      const absoluteFrom = path.resolve(basePath, zone.from);
+      const absoluteExceptionPaths = exceptionPaths.map((exceptionPath) => path.resolve(absoluteFrom, exceptionPath));
+      const hasValidExceptionPaths = absoluteExceptionPaths
+        .every((absoluteExceptionPath) => isValidExceptionPath(absoluteFrom, absoluteExceptionPath));
+
+      return {
+        absoluteExceptionPaths,
+        hasValidExceptionPaths,
+      };
+    });
+
     function checkForRestrictedImportPath(importPath, node) {
       const absoluteImportPath = resolve(importPath, context);
 
@@ -75,19 +92,14 @@ module.exports = {
         return;
       }
 
-      matchingZones.forEach((zone) => {
-        const exceptionPaths = zone.except || [];
+      matchingZones.forEach((zone, index) => {
         const absoluteFrom = path.resolve(basePath, zone.from);
 
         if (!containsPath(absoluteImportPath, absoluteFrom)) {
           return;
         }
 
-        const absoluteExceptionPaths = exceptionPaths.map((exceptionPath) =>
-          path.resolve(absoluteFrom, exceptionPath)
-        );
-        const hasValidExceptionPaths = absoluteExceptionPaths
-          .every((absoluteExceptionPath) => isValidExceptionPath(absoluteFrom, absoluteExceptionPath));
+        const { hasValidExceptionPaths, absoluteExceptionPaths } = zoneExceptions[index];
 
         if (!hasValidExceptionPaths) {
           reportInvalidExceptionPath(node);

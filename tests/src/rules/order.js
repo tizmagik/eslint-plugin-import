@@ -706,6 +706,45 @@ ruleTester.run('order', rule, {
         },
       ],
     }),
+    // Order of imports with similar names
+    test({
+      code: `
+        import React from 'react';
+        import { BrowserRouter } from 'react-router-dom';
+      `,
+      options: [
+        {
+          alphabetize: {
+            order: 'asc',
+          },
+        },
+      ],
+    }),
+    test({
+      code: `
+        import { UserInputError } from 'apollo-server-express';
+
+        import { new as assertNewEmail } from '~/Assertions/Email';
+      `,
+      options: [{
+        alphabetize: {
+          caseInsensitive: true,
+          order: 'asc',
+        },
+        pathGroups: [
+          { pattern: '~/*', group: 'internal' },
+        ],
+        groups: [
+          'builtin',
+          'external',
+          'internal',
+          'parent',
+          'sibling',
+          'index',
+        ],
+        'newlines-between': 'always',
+      }],
+    }),
     ...flatMap(getTSParsers, parser => [
       // Order of the `import ... = require(...)` syntax
       test({
@@ -854,10 +893,10 @@ ruleTester.run('order', rule, {
     test({
       code:
         `/* comment0 */  /* comment1 */  var async = require('async'); /* comment2 */` + `\r\n` +
-        `/* comment3 */  var fs = require('fs'); /* comment4 */` + `\r\n`,      
+        `/* comment3 */  var fs = require('fs'); /* comment4 */` + `\r\n`,
       output:
         `/* comment3 */  var fs = require('fs'); /* comment4 */` + `\r\n` +
-        `/* comment0 */  /* comment1 */  var async = require('async'); /* comment2 */` + `\r\n`,      
+        `/* comment0 */  /* comment1 */  var async = require('async'); /* comment2 */` + `\r\n`,
       errors: [{
         message: '`fs` import should occur before import of `async`',
       }],
@@ -1530,7 +1569,8 @@ ruleTester.run('order', rule, {
         },
       ],
     }),
-    // Option newlines-between: 'never' cannot fix if there are other statements between imports
+    // Option newlines-between: 'never' with unassigned imports and warnOnUnassignedImports disabled
+    // newline is preserved to match existing behavior
     test({
       code: `
         import path from 'path';
@@ -1542,6 +1582,53 @@ ruleTester.run('order', rule, {
       output: `
         import path from 'path';
         import 'loud-rejection';
+
+        import 'something-else';
+        import _ from 'lodash';
+      `,
+      options: [{ 'newlines-between': 'never', warnOnUnassignedImports: false }],
+      errors: [
+        {
+          line: 2,
+          message: 'There should be no empty line between import groups',
+        },
+      ],
+    }),
+    // Option newlines-between: 'never' with unassigned imports and warnOnUnassignedImports enabled
+    test({
+      code: `
+        import path from 'path';
+        import 'loud-rejection';
+
+        import 'something-else';
+        import _ from 'lodash';
+      `,
+      output: `
+        import path from 'path';
+        import 'loud-rejection';
+        import 'something-else';
+        import _ from 'lodash';
+      `,
+      options: [{ 'newlines-between': 'never', warnOnUnassignedImports: true }],
+      errors: [
+        {
+          line: 3,
+          message: 'There should be no empty line between import groups',
+        },
+      ],
+    }),
+    // Option newlines-between: 'never' cannot fix if there are other statements between imports
+    test({
+      code: `
+        import path from 'path';
+        export const abc = 123;
+
+        import 'something-else';
+        import _ from 'lodash';
+      `,
+      output: `
+        import path from 'path';
+        export const abc = 123;
 
         import 'something-else';
         import _ from 'lodash';
@@ -1764,7 +1851,6 @@ ruleTester.run('order', rule, {
         '`./local2` import should occur after import of `global4`',
       ],
     }),
-
     // pathGroup with position 'after'
     test({
       code: `
@@ -2225,29 +2311,109 @@ context('TypeScript', function () {
             },
             parserConfig,
           ),
+          // Option alphabetize: {order: 'asc'} with type group
+          test(
+            {
+              code: `
+                import c from 'Bar';
+                import b from 'bar';
+                import a from 'foo';
+
+                import index from './';
+
+                import type { C } from 'Bar';
+                import type { A } from 'foo';
+              `,
+              parser,
+              options: [
+                {
+                  groups: ['external', 'index', 'type'],
+                  alphabetize: { order: 'asc' },
+                },
+              ],
+            },
+            parserConfig,
+          ),
+          // Option alphabetize: {order: 'desc'} with type group
+          test(
+            {
+              code: `
+                import a from 'foo';
+                import b from 'bar';
+                import c from 'Bar';
+
+                import index from './';
+
+                import type { A } from 'foo';
+                import type { C } from 'Bar';
+              `,
+              parser,
+              options: [
+                {
+                  groups: ['external', 'index', 'type'],
+                  alphabetize: { order: 'desc' },
+                },
+              ],
+            },
+            parserConfig,
+          ),
+          test(
+            {
+              code: `
+                import { Partner } from '@models/partner/partner';
+                import { PartnerId } from '@models/partner/partner-id';
+              `,
+              parser,
+              options: [
+                {
+                  alphabetize: { order: 'asc' },
+                },
+              ],
+            },
+            parserConfig,
+          ),
+          test(
+            {
+              code: `
+                import { serialize, parse, mapFieldErrors } from '@vtaits/form-schema';
+                import type { GetFieldSchema } from '@vtaits/form-schema';
+                import { useMemo, useCallback } from 'react';
+                import type { ReactElement, ReactNode } from 'react';
+                import { Form } from 'react-final-form';
+                import type { FormProps as FinalFormProps } from 'react-final-form';
+              `,
+              parser,
+              options: [
+                {
+                  alphabetize: { order: 'asc' },
+                },
+              ],
+            },
+            parserConfig,
+          ),
         ],
         invalid: [
           // Option alphabetize: {order: 'asc'}
           test(
             {
               code: `
-              import b from 'bar';
-              import c from 'Bar';
-              import type { C } from 'Bar';
-              import a from 'foo';
-              import type { A } from 'foo';
+                import b from 'bar';
+                import c from 'Bar';
+                import type { C } from 'Bar';
+                import a from 'foo';
+                import type { A } from 'foo';
 
-              import index from './';
-            `,
+                import index from './';
+              `,
               output: `
-              import c from 'Bar';
-              import type { C } from 'Bar';
-              import b from 'bar';
-              import a from 'foo';
-              import type { A } from 'foo';
+                import c from 'Bar';
+                import type { C } from 'Bar';
+                import b from 'bar';
+                import a from 'foo';
+                import type { A } from 'foo';
 
-              import index from './';
-            `,
+                import index from './';
+              `,
               parser,
               options: [
                 {
@@ -2269,23 +2435,23 @@ context('TypeScript', function () {
           test(
             {
               code: `
-              import a from 'foo';
-              import type { A } from 'foo';
-              import c from 'Bar';
-              import type { C } from 'Bar';
-              import b from 'bar';
+                import a from 'foo';
+                import type { A } from 'foo';
+                import c from 'Bar';
+                import type { C } from 'Bar';
+                import b from 'bar';
 
-              import index from './';
-            `,
+                import index from './';
+              `,
               output: `
-              import a from 'foo';
-              import type { A } from 'foo';
-              import b from 'bar';
-              import c from 'Bar';
-              import type { C } from 'Bar';
+                import a from 'foo';
+                import type { A } from 'foo';
+                import b from 'bar';
+                import c from 'Bar';
+                import type { C } from 'Bar';
 
-              import index from './';
-            `,
+                import index from './';
+              `,
               parser,
               options: [
                 {
@@ -2303,6 +2469,133 @@ context('TypeScript', function () {
             },
             parserConfig,
           ),
+          // Option alphabetize: {order: 'asc'} with type group
+          test(
+            {
+              code: `
+                import b from 'bar';
+                import c from 'Bar';
+                import a from 'foo';
+
+                import index from './';
+
+                import type { A } from 'foo';
+                import type { C } from 'Bar';
+              `,
+              output: `
+                import c from 'Bar';
+                import b from 'bar';
+                import a from 'foo';
+
+                import index from './';
+
+                import type { C } from 'Bar';
+                import type { A } from 'foo';
+              `,
+              parser,
+              options: [
+                {
+                  groups: ['external', 'index', 'type'],
+                  alphabetize: { order: 'asc' },
+                },
+              ],
+              errors: semver.satisfies(eslintPkg.version, '< 3') ? [
+                { message: '`Bar` import should occur before import of `bar`' },
+                { message: '`Bar` import should occur before import of `foo`' },
+              ] : [
+                { message: /(`Bar` import should occur before import of `bar`)|(`bar` import should occur after import of `Bar`)/ },
+                { message: /(`Bar` import should occur before import of `foo`)|(`foo` import should occur after import of `Bar`)/ },
+              ],
+            },
+            parserConfig,
+          ),
+          // Option alphabetize: {order: 'desc'} with type group
+          test(
+            {
+              code: `
+                import a from 'foo';
+                import c from 'Bar';
+                import b from 'bar';
+
+                import index from './';
+
+                import type { C } from 'Bar';
+                import type { A } from 'foo';
+              `,
+              output: `
+                import a from 'foo';
+                import b from 'bar';
+                import c from 'Bar';
+
+                import index from './';
+
+                import type { A } from 'foo';
+                import type { C } from 'Bar';
+              `,
+              parser,
+              options: [
+                {
+                  groups: ['external', 'index', 'type'],
+                  alphabetize: { order: 'desc' },
+                },
+              ],
+              errors: semver.satisfies(eslintPkg.version, '< 3') ? [
+                { message: '`bar` import should occur before import of `Bar`' },
+                { message: '`foo` import should occur before import of `Bar`' },
+              ] : [
+                { message: /(`bar` import should occur before import of `Bar`)|(`Bar` import should occur after import of `bar`)/ },
+                { message: /(`foo` import should occur before import of `Bar`)|(`Bar` import should occur after import of `foo`)/ },
+              ],
+            },
+            parserConfig,
+          ),
+          // warns for out of order unassigned imports (warnOnUnassignedImports enabled)
+          test({
+            code: `
+              import './local1';
+              import global from 'global1';
+              import local from './local2';
+              import 'global2';
+            `,
+            output: `
+              import './local1';
+              import global from 'global1';
+              import local from './local2';
+              import 'global2';
+            `,
+            errors: [
+              {
+                message: '`global1` import should occur before import of `./local1`',
+              },
+              {
+                message: '`global2` import should occur before import of `./local1`',
+              },
+            ],
+            options: [{ warnOnUnassignedImports: true }],
+          }),
+          // fix cannot move below unassigned import (warnOnUnassignedImports enabled)
+          test({
+            code: `
+              import local from './local';
+
+              import 'global1';
+
+              import global2 from 'global2';
+              import global3 from 'global3';
+            `,
+            output: `
+              import local from './local';
+
+              import 'global1';
+
+              import global2 from 'global2';
+              import global3 from 'global3';
+            `,
+            errors: [{
+              message: '`./local` import should occur after import of `global3`',
+            }],
+            options: [{ warnOnUnassignedImports: true }],
+          }),
         ],
       });
     });

@@ -265,14 +265,17 @@ function mutateRanksToAlphabetize(imported, alphabetizeOptions) {
     if (!Array.isArray(acc[importedItem.rank])) {
       acc[importedItem.rank] = [];
     }
-    acc[importedItem.rank].push(importedItem.value);
+    acc[importedItem.rank].push(importedItem);
     return acc;
   }, {});
 
   const groupRanks = Object.keys(groupedByRanks);
 
   const sorterFn = getSorter(alphabetizeOptions.order === 'asc');
-  const comparator = alphabetizeOptions.caseInsensitive ? (a, b) => sorterFn(String(a).toLowerCase(), String(b).toLowerCase()) : (a, b) => sorterFn(a, b);
+  const comparator = alphabetizeOptions.caseInsensitive
+    ? (a, b) => sorterFn(String(a.value).toLowerCase(), String(b.value).toLowerCase())
+    : (a, b) => sorterFn(a.value, b.value);
+
   // sort imports locally within their group
   groupRanks.forEach(function(groupRank) {
     groupedByRanks[groupRank].sort(comparator);
@@ -281,8 +284,8 @@ function mutateRanksToAlphabetize(imported, alphabetizeOptions) {
   // assign globally unique rank to each import
   let newRank = 0;
   const alphabetizedRanks = groupRanks.sort().reduce(function(acc, groupRank) {
-    groupedByRanks[groupRank].forEach(function(importedItemName) {
-      acc[importedItemName] = parseInt(groupRank, 10) + newRank;
+    groupedByRanks[groupRank].forEach(function(importedItem) {
+      acc[`${importedItem.value}|${importedItem.node.importKind}`] = parseInt(groupRank, 10) + newRank;
       newRank += 1;
     });
     return acc;
@@ -290,7 +293,7 @@ function mutateRanksToAlphabetize(imported, alphabetizeOptions) {
 
   // mutate the original group-rank with alphabetized-rank
   imported.forEach(function(importedItem) {
-    importedItem.rank = alphabetizedRanks[importedItem.value];
+    importedItem.rank = alphabetizedRanks[`${importedItem.value}|${importedItem.node.importKind}`];
   });
 }
 
@@ -310,6 +313,8 @@ function computeRank(context, ranks, importEntry, excludedImportTypes) {
   let rank;
   if (importEntry.type === 'import:object') {
     impType = 'object';
+  } else if (importEntry.node.importKind === 'type' && ranks.omittedTypes.indexOf('type') === -1) {
+    impType = 'type';
   } else {
     impType = importType(importEntry.value, context);
   }
@@ -337,7 +342,7 @@ function isModuleLevelRequire(node) {
   let n = node;
   // Handle cases like `const baz = require('foo').bar.baz`
   // and `const foo = require('foo')()`
-  while ( 
+  while (
     (n.parent.type === 'MemberExpression' && n.parent.object === n) ||
     (n.parent.type === 'CallExpression' && n.parent.callee === n)
   ) {
@@ -346,11 +351,11 @@ function isModuleLevelRequire(node) {
   return (
     n.parent.type === 'VariableDeclarator' &&
     n.parent.parent.type === 'VariableDeclaration' &&
-    n.parent.parent.parent.type === 'Program' 
+    n.parent.parent.parent.type === 'Program'
   );
 }
 
-const types = ['builtin', 'external', 'internal', 'unknown', 'parent', 'sibling', 'index', 'object'];
+const types = ['builtin', 'external', 'internal', 'unknown', 'parent', 'sibling', 'index', 'object', 'type'];
 
 // Creates an object with type-rank pairs.
 // Example: { index: 0, sibling: 1, parent: 1, external: 1, builtin: 2, internal: 2 }
@@ -377,10 +382,12 @@ function convertGroupsToRanks(groups) {
     return rankObject[type] === undefined;
   });
 
-  return omittedTypes.reduce(function(res, type) {
+  const ranks = omittedTypes.reduce(function(res, type) {
     res[type] = groups.length;
     return res;
   }, rankObject);
+
+  return { groups: ranks, omittedTypes };
 }
 
 function convertPathGroupsForRanks(pathGroups) {
@@ -566,6 +573,10 @@ module.exports = {
             },
             additionalProperties: false,
           },
+          warnOnUnassignedImports: {
+            type: 'boolean',
+            default: false,
+          },
         },
         additionalProperties: false,
       },
@@ -581,8 +592,10 @@ module.exports = {
 
     try {
       const { pathGroups, maxPosition } = convertPathGroupsForRanks(options.pathGroups || []);
+      const { groups, omittedTypes } = convertGroupsToRanks(options.groups || defaultGroups);
       ranks = {
-        groups: convertGroupsToRanks(options.groups || defaultGroups),
+        groups,
+        omittedTypes,
         pathGroups,
         maxPosition,
       };
@@ -598,7 +611,8 @@ module.exports = {
 
     return {
       ImportDeclaration: function handleImports(node) {
-        if (node.specifiers.length) { // Ignoring unassigned imports
+        // Ignoring unassigned imports unless warnOnUnassignedImports is set
+        if (node.specifiers.length || options.warnOnUnassignedImports) {
           const name = node.source.value;
           registerNode(
             context,

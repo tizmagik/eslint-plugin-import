@@ -88,7 +88,7 @@ ruleTester.run('no-extraneous-dependencies', rule, {
     }),
     test({
       code: `
-        // @flow                                                                                                                                                                                                   
+        // @flow
         import typeof TypeScriptModule from 'typescript';
       `,
       options: [{ packageDir: packageDirWithFlowTyped }],
@@ -149,6 +149,19 @@ ruleTester.run('no-extraneous-dependencies', rule, {
     test({
       code: 'import "@generated/bar/and/sub/path"',
       settings: { 'import/core-modules': ['@generated/bar'] },
+    }),
+    // check if "rxjs" dependency declaration fix the "rxjs/operators subpackage
+    test({
+      code: 'import "rxjs/operators"',
+    }),
+
+    test({
+      code: 'import "esm-package/esm-module";',
+    }),
+
+    test({
+      code: 'import "alias/esm-package/esm-module";',
+      settings: { 'import/resolver': 'webpack' },
     }),
   ],
   invalid: [
@@ -352,6 +365,13 @@ ruleTester.run('no-extraneous-dependencies', rule, {
       options: [{ packageDir: packageDirMonoRepoRoot }],
       errors: [{
         message: `'not-a-dependency' should be listed in the project's dependencies. Run 'npm i -S not-a-dependency' to add it`,
+      }],
+    }),
+
+    test({
+      code: 'import "esm-package-not-in-pkg-json/esm-module";',
+      errors: [{
+        message: `'esm-package-not-in-pkg-json' should be listed in the project's dependencies. Run 'npm i -S esm-package-not-in-pkg-json' to add it`,
       }],
     }),
   ],
